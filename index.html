@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Life Album</title>
+  <meta name="description" content="Album ảnh phiêu lưu suốt cuộc đời" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;1,500&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="assets/css/style.css" />
+</head>
+<body>
+  <header class="site-header">
+    <p class="site-eyebrow">Life Album</p>
+    <h1 class="site-title">Cuộc đời, qua từng khoảnh khắc</h1>
+    <nav class="view-tabs" role="tablist">
+      <button class="tab active" data-view="timeline" role="tab" aria-selected="true">Dòng thời gian</button>
+      <button class="tab" data-view="albums" role="tab" aria-selected="false">Albums</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="timeline-view" class="view active"></section>
+    <section id="albums-view" class="view"></section>
+    <section id="album-detail-view" class="view"></section>
+
+    <div id="empty-state" class="empty-state hidden">
+      <p>Chưa có kỷ niệm nào ở đây.</p>
+      <p class="empty-hint">Thêm ảnh vào thư mục <code>photos/&lt;Tên Album&gt;/</code> rồi <code>git push</code> — trang sẽ tự cập nhật.</p>
+    </div>
+  </main>
+
+  <div id="lightbox" class="lightbox hidden">
+    <button class="lightbox-close" aria-label="Đóng">&times;</button>
+    <button class="lightbox-prev" aria-label="Ảnh trước">&#10094;</button>
+    <figure class="lightbox-figure">
+      <img class="lightbox-img" src="" alt="" />
+      <figcaption>
+        <span class="lightbox-date"></span>
+        <span class="lightbox-place"></span>
+      </figcaption>
+    </figure>
+    <button class="lightbox-next" aria-label="Ảnh tiếp theo">&#10095;</button>
+  </div>
+
+  <script src="assets/js/app.js" type="module"></script>
+</body>
+</html>
