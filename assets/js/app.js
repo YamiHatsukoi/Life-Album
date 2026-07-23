@@ -1,6 +1,7 @@
 const state = {
   photos: [],
   albums: [],
+  currentAlbumPhotos: [],
   lightboxSet: [],
   lightboxIndex: 0,
 };
@@ -73,6 +74,10 @@ function mountLazyImages(container) {
   imgs.forEach((img) => io.observe(img));
 }
 
+function monthOf(iso) {
+  return iso ? new Date(iso).getMonth() : -1;
+}
+
 function renderTimeline() {
   if (state.photos.length === 0) {
     els.timelineView.innerHTML = "";
@@ -81,32 +86,39 @@ function renderTimeline() {
   const byYear = new Map();
   for (const p of state.photos) {
     const y = yearOf(p.date);
-    if (!byYear.has(y)) byYear.set(y, []);
-    byYear.get(y).push(p);
+    if (!byYear.has(y)) byYear.set(y, new Map());
+    const months = byYear.get(y);
+    const m = monthOf(p.date);
+    if (!months.has(m)) months.set(m, []);
+    months.get(m).push(p);
   }
-  // state.photos is sorted ascending by date already; render oldest year first
+  // state.photos is sorted ascending by date already; render oldest year/month first
   const years = [...byYear.keys()];
 
   els.timelineView.innerHTML = years
-    .map(
-      (year) => `
+    .map((year) => {
+      const months = byYear.get(year);
+      const monthKeys = [...months.keys()].sort((a, b) => a - b);
+      const monthsHTML = monthKeys
+        .map(
+          (m) => `
+          <div class="timeline-month">
+            <h3 class="timeline-month-label">${m === -1 ? "Không rõ tháng" : MONTHS_VI[m]}</h3>
+            <div class="photo-grid">
+              ${months.get(m).map(photoCardHTML).join("")}
+            </div>
+          </div>`
+        )
+        .join("");
+      return `
       <section class="timeline-year">
         <h2 class="timeline-year-label">${year}</h2>
-        <div class="photo-grid">
-          ${byYear.get(year).map(photoCardHTML).join("")}
-        </div>
-      </section>`
-    )
+        ${monthsHTML}
+      </section>`;
+    })
     .join("");
 
   mountLazyImages(els.timelineView);
-  els.timelineView.querySelectorAll(".photo-card").forEach((card) => {
-    card.addEventListener("click", () => {
-      const id = card.dataset.id;
-      const idx = state.photos.findIndex((p) => p.id === id);
-      openLightbox(state.photos, idx);
-    });
-  });
 }
 
 function albumCardHTML(album) {
@@ -133,14 +145,11 @@ function renderAlbums() {
   }
   els.albumsView.innerHTML = `<div class="album-grid">${state.albums.map(albumCardHTML).join("")}</div>`;
   mountLazyImages(els.albumsView);
-  els.albumsView.querySelectorAll(".album-card").forEach((card) => {
-    card.addEventListener("click", () => showAlbumDetail(card.dataset.id));
-  });
 }
 
 function showAlbumDetail(albumId) {
   const album = state.albums.find((a) => a.id === albumId);
-  const photos = state.photos.filter((p) => p.albumId === albumId);
+  state.currentAlbumPhotos = state.photos.filter((p) => p.albumId === albumId);
   if (!album) return;
 
   els.albumDetailView.innerHTML = `
@@ -148,18 +157,9 @@ function showAlbumDetail(albumId) {
       <button class="back-button">&larr; Albums</button>
       <h2 class="album-detail-title">${album.name}</h2>
     </div>
-    <div class="photo-grid">${photos.map(photoCardHTML).join("")}</div>
+    <div class="photo-grid">${state.currentAlbumPhotos.map(photoCardHTML).join("")}</div>
   `;
   mountLazyImages(els.albumDetailView);
-  els.albumDetailView.querySelector(".back-button").addEventListener("click", () => switchView("albums"));
-  els.albumDetailView.querySelectorAll(".photo-card").forEach((card) => {
-    card.addEventListener("click", () => {
-      const id = card.dataset.id;
-      const idx = photos.findIndex((p) => p.id === id);
-      openLightbox(photos, idx);
-    });
-  });
-
   switchView("album-detail");
 }
 
@@ -205,9 +205,44 @@ function bindEvents() {
     tab.addEventListener("click", () => switchView(tab.dataset.view));
   });
 
+  // Delegated listeners: the grids inside these containers get replaced
+  // wholesale on every render, but the containers themselves never do, so
+  // binding here once avoids ever needing to re-attach per-card listeners.
+  els.timelineView.addEventListener("click", (e) => {
+    const card = e.target.closest(".photo-card");
+    if (!card) return;
+    const idx = state.photos.findIndex((p) => p.id === card.dataset.id);
+    if (idx > -1) openLightbox(state.photos, idx);
+  });
+
+  els.albumsView.addEventListener("click", (e) => {
+    const card = e.target.closest(".album-card");
+    if (!card) return;
+    showAlbumDetail(card.dataset.id);
+  });
+
+  els.albumDetailView.addEventListener("click", (e) => {
+    if (e.target.closest(".back-button")) {
+      switchView("albums");
+      return;
+    }
+    const card = e.target.closest(".photo-card");
+    if (!card) return;
+    const idx = state.currentAlbumPhotos.findIndex((p) => p.id === card.dataset.id);
+    if (idx > -1) openLightbox(state.currentAlbumPhotos, idx);
+  });
+
   document.querySelector(".lightbox-close").addEventListener("click", closeLightbox);
   document.querySelector(".lightbox-prev").addEventListener("click", () => stepLightbox(-1));
   document.querySelector(".lightbox-next").addEventListener("click", () => stepLightbox(1));
+
+  // Tap the left/right half of the photo itself to go prev/next — handy on
+  // mobile where the edge arrow buttons are small and easy to miss.
+  els.lightboxImg.addEventListener("click", (e) => {
+    const rect = els.lightboxImg.getBoundingClientRect();
+    const isLeftHalf = e.clientX - rect.left < rect.width / 2;
+    stepLightbox(isLeftHalf ? -1 : 1);
+  });
   els.lightbox.addEventListener("click", (e) => {
     if (e.target === els.lightbox) closeLightbox();
   });

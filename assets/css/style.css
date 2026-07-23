@@ -104,6 +104,21 @@ main { max-width: 1200px; margin: 0 auto; padding: 3rem 1.5rem 6rem; }
   z-index: 2;
 }
 
+.timeline-month {
+  margin-bottom: 2rem;
+}
+
+.timeline-month-label {
+  font-family: var(--sans);
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin: 0 0 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
 .photo-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -255,6 +270,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 3rem 1.5rem 6rem; }
   max-height: 78vh;
   border-radius: 6px;
   box-shadow: var(--shadow);
+  cursor: pointer;
 }
 
 .lightbox-figure figcaption {
