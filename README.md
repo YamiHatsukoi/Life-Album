@@ -10,14 +10,18 @@ Album ảnh phiêu lưu suốt cuộc đời — một trang web tĩnh, tự đ�
 4. GitHub Actions sẽ tự động:
    - Đọc **ngày chụp** và **tọa độ GPS** từ EXIF của ảnh (nếu ảnh không có EXIF, hệ thống lấy ngày từ tên file nếu có dạng `YYYY-MM-DD`, hoặc lấy ngày ảnh được commit lên repo).
    - Dịch tọa độ GPS sang tên địa danh (VD: "Đà Lạt, Việt Nam") và lưu cache vào `data/geocache.json` để lần build sau không phải tra lại.
-   - Resize + nén ảnh thành bản thumbnail và bản xem đầy đủ.
+   - Resize + nén ảnh thành bản thumbnail và bản xem đầy đủ — **chỉ xử lý ảnh mới hoặc ảnh đã thay đổi nội dung**, ảnh cũ được lấy lại từ cache của GitHub Actions nên build luôn nhanh dù kho ảnh có lớn tới đâu.
    - Build và deploy trang web lên GitHub Pages.
 
 Sau khoảng 1–2 phút, trang web sẽ tự cập nhật với ảnh mới. Kiểm tra tiến trình tại tab **Actions** của repo.
 
-## Bật GitHub Pages (chỉ cần làm 1 lần)
+## Setup ban đầu (chỉ cần làm 1 lần, sau khi push repo lên GitHub)
 
-Vào **Settings → Pages** của repo → mục "Build and deployment" → chọn **Source: GitHub Actions**.
+1. **Bật GitHub Pages**: vào **Settings → Pages** → mục "Build and deployment" → chọn **Source: GitHub Actions**.
+2. **Cho phép Action được quyền commit**: vào **Settings → Actions → General** → cuộn xuống "Workflow permissions" → chọn **Read and write permissions** → Save.
+   (Mặc định GitHub khóa quyền ghi của Action. Nếu bỏ qua bước này, bước tự lưu cache tên địa danh vào `data/geocache.json` sẽ báo lỗi 403 khi push — trang vẫn build và deploy bình thường, chỉ là lần sau sẽ phải tra lại địa danh từ đầu thay vì dùng cache.)
+
+Làm xong 2 bước trên là chạy mãi mãi, không cần đụng lại nữa.
 
 ## Cấu trúc dự án
 

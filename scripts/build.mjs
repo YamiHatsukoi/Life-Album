@@ -4,6 +4,7 @@
 // images, and writes the deployable site into _site/.
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import { execSync } from "node:child_process";
 import exifr from "exifr";
 import sharp from "sharp";
@@ -94,6 +95,15 @@ async function reverseGeocode(lat, lon, cache) {
   }
 }
 
+async function fileExists(p) {
+  try {
+    await fs.access(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function walkAlbums() {
   const entries = await fs.readdir(PHOTOS_DIR, { withFileTypes: true }).catch(() => []);
   const albums = [];
@@ -110,8 +120,14 @@ async function walkAlbums() {
 }
 
 async function main() {
-  await fs.rm(SITE_DIR, { recursive: true, force: true });
-  await fs.mkdir(SITE_DIR, { recursive: true });
+  // _site/photos is restored from the GitHub Actions cache before this script
+  // runs (see the workflow), so we deliberately do NOT wipe it — that's what
+  // lets already-resized photos be skipped below instead of reprocessed
+  // every single build. Everything else is cheap to regenerate from scratch.
+  await fs.mkdir(path.join(SITE_DIR, "photos"), { recursive: true });
+  await fs.rm(path.join(SITE_DIR, "data"), { recursive: true, force: true });
+  await fs.rm(path.join(SITE_DIR, "assets"), { recursive: true, force: true });
+  await fs.rm(path.join(SITE_DIR, "index.html"), { force: true });
 
   const geocache = await loadJson(GEOCACHE_PATH, {});
   const gitDates = buildGitAddedDateMap();
@@ -164,21 +180,29 @@ async function main() {
         place = await reverseGeocode(exifData.latitude, exifData.longitude, geocache);
       }
 
-      const img = sharp(buf).rotate();
-      const meta = await img.metadata();
+      const meta = await sharp(buf).metadata();
 
-      const thumbName = `${baseName}.webp`;
-      const fullName = `${baseName}.webp`;
-      await sharp(buf)
-        .rotate()
-        .resize({ width: THUMB_WIDTH, withoutEnlargement: true })
-        .webp({ quality: 75 })
-        .toFile(path.join(albumThumbDir, thumbName));
-      await sharp(buf)
-        .rotate()
-        .resize({ width: FULL_MAX, height: FULL_MAX, fit: "inside", withoutEnlargement: true })
-        .webp({ quality: 85 })
-        .toFile(path.join(albumFullDir, fullName));
+      // Content hash ties the output name to this exact file's bytes, so
+      // replacing a photo (same filename, new content) produces a fresh
+      // output instead of silently reusing a stale cached thumbnail.
+      const hash = crypto.createHash("sha1").update(buf).digest("hex").slice(0, 10);
+      const thumbName = `${baseName}-${hash}.webp`;
+      const fullName = `${baseName}-${hash}.webp`;
+      const thumbPath = path.join(albumThumbDir, thumbName);
+      const fullPath = path.join(albumFullDir, fullName);
+
+      if (!(await fileExists(thumbPath)) || !(await fileExists(fullPath))) {
+        await sharp(buf)
+          .rotate()
+          .resize({ width: THUMB_WIDTH, withoutEnlargement: true })
+          .webp({ quality: 75 })
+          .toFile(thumbPath);
+        await sharp(buf)
+          .rotate()
+          .resize({ width: FULL_MAX, height: FULL_MAX, fit: "inside", withoutEnlargement: true })
+          .webp({ quality: 85 })
+          .toFile(fullPath);
+      }
 
       outPhotos.push({
         id: `${albumId}-${baseName}`,

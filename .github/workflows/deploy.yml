@@ -31,6 +31,14 @@ jobs:
       - name: Install dependencies
         run: npm install --no-save exifr sharp
 
+      - name: Restore resized-photo cache
+        uses: actions/cache@v4
+        with:
+          path: _site/photos
+          key: photos-cache-${{ github.run_id }}
+          restore-keys: |
+            photos-cache-
+
       - name: Build site
         run: node scripts/build.mjs
 
