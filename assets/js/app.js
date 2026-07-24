@@ -2,6 +2,7 @@ const state = {
   photos: [],
   albums: [],
   currentAlbumPhotos: [],
+  currentPlacePhotos: [],
   lightboxSet: [],
   lightboxIndex: 0,
 };
@@ -12,6 +13,8 @@ const els = {
   timelineView: document.getElementById("timeline-view"),
   albumsView: document.getElementById("albums-view"),
   albumDetailView: document.getElementById("album-detail-view"),
+  placesView: document.getElementById("places-view"),
+  placeDetailView: document.getElementById("place-detail-view"),
   mapView: document.getElementById("map-view"),
   emptyState: document.getElementById("empty-state"),
   statsStrip: document.getElementById("stats-strip"),
@@ -26,7 +29,7 @@ let leafletMap = null;
 let timelineChunks = [];
 let timelineChunkIndex = 0;
 let timelineObserver = null;
-const rendered = { timeline: false, albums: false };
+const rendered = { timeline: false, albums: false, places: false };
 
 const MONTHS_VI = [
   "Tháng 1", "Tháng 2", "Tháng 3", "Tháng 4", "Tháng 5", "Tháng 6",
@@ -298,19 +301,18 @@ function ensureMap() {
   leafletMap.fitBounds(bounds, { padding: [30, 30] });
 }
 
+function formatDateRange(start, end) {
+  if (!start || !end) return "Không rõ ngày";
+  return start === end ? formatDate(start) : `${formatDate(start)} — ${formatDate(end)}`;
+}
+
 function albumCardHTML(album) {
-  const range =
-    album.dateStart && album.dateEnd
-      ? album.dateStart === album.dateEnd
-        ? formatDate(album.dateStart)
-        : `${formatDate(album.dateStart)} — ${formatDate(album.dateEnd)}`
-      : "Không rõ ngày";
   return `
     <div class="album-card" data-id="${album.id}">
       ${album.cover ? `<img class="cover" data-src="${album.cover}" alt="${album.name}" loading="lazy" />` : `<div class="cover"></div>`}
       <div class="album-card-body">
         <h3 class="album-card-title">${album.name}</h3>
-        <p class="album-card-meta">${album.count} ảnh &middot; ${range}</p>
+        <p class="album-card-meta">${album.count} ảnh &middot; ${formatDateRange(album.dateStart, album.dateEnd)}</p>
       </div>
     </div>`;
 }
@@ -340,10 +342,76 @@ function showAlbumDetail(albumId) {
   switchView("album-detail");
 }
 
+// Groups photos by their geocoded place name — same "cards you click into"
+// pattern as Albums, just grouped by location instead of by folder.
+function computePlaces() {
+  const byPlace = new Map();
+  for (const p of state.photos) {
+    if (!p.place) continue;
+    if (!byPlace.has(p.place)) byPlace.set(p.place, []);
+    byPlace.get(p.place).push(p);
+  }
+  const places = [];
+  for (const [place, photos] of byPlace) {
+    const dates = photos.map((p) => p.date).filter(Boolean).sort();
+    places.push({
+      place,
+      count: photos.length,
+      cover: photos[0].thumb,
+      dateStart: dates[0] || null,
+      dateEnd: dates[dates.length - 1] || null,
+    });
+  }
+  places.sort((a, b) => b.count - a.count);
+  return places;
+}
+
+function placeCardHTML(p) {
+  return `
+    <div class="album-card" data-place="${p.place.replace(/"/g, "&quot;")}">
+      <img class="cover" data-src="${p.cover}" alt="${p.place}" loading="lazy" />
+      <div class="album-card-body">
+        <h3 class="album-card-title">${p.place}</h3>
+        <p class="album-card-meta">${p.count} ảnh &middot; ${formatDateRange(p.dateStart, p.dateEnd)}</p>
+      </div>
+    </div>`;
+}
+
+function renderPlaces() {
+  const places = computePlaces();
+  if (places.length === 0) {
+    els.placesView.innerHTML = `<p class="map-empty-hint">Chưa có ảnh nào có thông tin địa danh.</p>`;
+    return;
+  }
+  els.placesView.innerHTML = `<div class="album-grid">${places.map(placeCardHTML).join("")}</div>`;
+  mountLazyImages(els.placesView);
+}
+
+function showPlaceDetail(place) {
+  state.currentPlacePhotos = state.photos.filter((p) => p.place === place);
+  if (state.currentPlacePhotos.length === 0) return;
+
+  els.placeDetailView.innerHTML = `
+    <div class="album-detail-header">
+      <button class="back-button">&larr; Địa danh</button>
+      <h2 class="album-detail-title">${place}</h2>
+    </div>
+    <div class="photo-grid">${state.currentPlacePhotos.map(photoCardHTML).join("")}</div>
+  `;
+  mountLazyImages(els.placeDetailView);
+  switchView("place-detail");
+}
+
 function switchView(view) {
-  [els.homeView, els.timelineView, els.albumsView, els.albumDetailView, els.mapView].forEach((v) =>
-    v.classList.remove("active")
-  );
+  [
+    els.homeView,
+    els.timelineView,
+    els.albumsView,
+    els.albumDetailView,
+    els.placesView,
+    els.placeDetailView,
+    els.mapView,
+  ].forEach((v) => v.classList.remove("active"));
   document.getElementById(`${view}-view`).classList.add("active");
   els.tabs.forEach((tab) => {
     const isMatch = tab.dataset.view === view;
@@ -392,6 +460,9 @@ function bindEvents() {
       } else if (view === "albums" && !rendered.albums) {
         rendered.albums = true;
         renderAlbums();
+      } else if (view === "places" && !rendered.places) {
+        rendered.places = true;
+        renderPlaces();
       } else if (view === "map") {
         ensureMap();
         setTimeout(() => leafletMap && leafletMap.invalidateSize(), 50);
@@ -431,6 +502,23 @@ function bindEvents() {
     if (!card) return;
     const idx = state.currentAlbumPhotos.findIndex((p) => p.id === card.dataset.id);
     if (idx > -1) openLightbox(state.currentAlbumPhotos, idx);
+  });
+
+  els.placesView.addEventListener("click", (e) => {
+    const card = e.target.closest(".album-card");
+    if (!card) return;
+    showPlaceDetail(card.dataset.place);
+  });
+
+  els.placeDetailView.addEventListener("click", (e) => {
+    if (e.target.closest(".back-button")) {
+      switchView("places");
+      return;
+    }
+    const card = e.target.closest(".photo-card");
+    if (!card) return;
+    const idx = state.currentPlacePhotos.findIndex((p) => p.id === card.dataset.id);
+    if (idx > -1) openLightbox(state.currentPlacePhotos, idx);
   });
 
   document.querySelector(".lightbox-close").addEventListener("click", closeLightbox);
