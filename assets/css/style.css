@@ -364,7 +364,9 @@ main { max-width: 1200px; margin: 0 auto; padding: 3rem 1.5rem 6rem; }
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  /* Leaflet's own panes/controls use z-index up to ~1000, so the lightbox
+     needs to sit well above that or the map bleeds through on top of it. */
+  z-index: 2000;
   padding: 2rem;
 }
 
