@@ -28,19 +28,22 @@
     </div>
 
     <nav class="view-tabs" role="tablist">
-      <button class="tab active" data-view="timeline" role="tab" aria-selected="true">Dòng thời gian</button>
+      <button class="tab active" data-view="home" role="tab" aria-selected="true">Kỷ niệm</button>
+      <button class="tab" data-view="timeline" role="tab" aria-selected="false">Dòng thời gian</button>
       <button class="tab" data-view="albums" role="tab" aria-selected="false">Albums</button>
       <button class="tab" data-view="map" role="tab" aria-selected="false">Bản đồ</button>
     </nav>
   </header>
 
   <main>
-    <section id="on-this-day" class="on-this-day hidden">
-      <h2 class="on-this-day-label">Hôm nay năm xưa</h2>
-      <div class="on-this-day-scroller"></div>
+    <section id="home-view" class="view active">
+      <section id="on-this-day" class="on-this-day hidden">
+        <h2 class="on-this-day-label">Hôm nay năm xưa</h2>
+        <div class="on-this-day-scroller"></div>
+      </section>
     </section>
 
-    <section id="timeline-view" class="view active"></section>
+    <section id="timeline-view" class="view"></section>
     <section id="albums-view" class="view"></section>
     <section id="album-detail-view" class="view"></section>
     <section id="map-view" class="view">

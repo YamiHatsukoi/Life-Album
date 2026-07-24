@@ -8,6 +8,7 @@ const state = {
 
 const els = {
   tabs: document.querySelectorAll(".tab"),
+  homeView: document.getElementById("home-view"),
   timelineView: document.getElementById("timeline-view"),
   albumsView: document.getElementById("albums-view"),
   albumDetailView: document.getElementById("album-detail-view"),
@@ -22,6 +23,10 @@ const els = {
 };
 
 let leafletMap = null;
+let timelineChunks = [];
+let timelineChunkIndex = 0;
+let timelineObserver = null;
+const rendered = { timeline: false, albums: false };
 
 const MONTHS_VI = [
   "Tháng 1", "Tháng 2", "Tháng 3", "Tháng 4", "Tháng 5", "Tháng 6",
@@ -70,6 +75,7 @@ function mountLazyImages(container) {
         if (!entry.isIntersecting) continue;
         const img = entry.target;
         img.src = img.dataset.src;
+        delete img.dataset.src; // keeps repeated mountLazyImages() scans on a growing container cheap
         img.addEventListener("load", () => img.classList.add("loaded"), { once: true });
         io.unobserve(img);
       }
@@ -83,11 +89,9 @@ function monthOf(iso) {
   return iso ? new Date(iso).getMonth() : -1;
 }
 
-function renderTimeline() {
-  if (state.photos.length === 0) {
-    els.timelineView.innerHTML = "";
-    return;
-  }
+// Flattens photos into ordered {year, month, photos} groups — one group per
+// batch the infinite-scroll renderer below appends at a time.
+function buildTimelineChunks() {
   const byYear = new Map();
   for (const p of state.photos) {
     const y = yearOf(p.date);
@@ -97,33 +101,85 @@ function renderTimeline() {
     if (!months.has(m)) months.set(m, []);
     months.get(m).push(p);
   }
-  // state.photos is sorted ascending by date already; render oldest year/month first
-  const years = [...byYear.keys()];
+  // state.photos is sorted ascending by date already; chunks come out oldest-first
+  const chunks = [];
+  for (const [year, months] of byYear) {
+    const monthKeys = [...months.keys()].sort((a, b) => a - b);
+    for (const m of monthKeys) {
+      chunks.push({ year, month: m, photos: months.get(m) });
+    }
+  }
+  return chunks;
+}
 
-  els.timelineView.innerHTML = years
-    .map((year) => {
-      const months = byYear.get(year);
-      const monthKeys = [...months.keys()].sort((a, b) => a - b);
-      const monthsHTML = monthKeys
-        .map(
-          (m) => `
-          <div class="timeline-month">
-            <h3 class="timeline-month-label">${m === -1 ? "Không rõ tháng" : MONTHS_VI[m]}</h3>
-            <div class="photo-grid">
-              ${months.get(m).map(photoCardHTML).join("")}
-            </div>
-          </div>`
-        )
-        .join("");
-      return `
-      <section class="timeline-year">
-        <h2 class="timeline-year-label">${year}</h2>
-        ${monthsHTML}
-      </section>`;
-    })
-    .join("");
+const TIMELINE_BATCH = 3;
 
-  mountLazyImages(els.timelineView);
+function renderTimelineBatch() {
+  const el = els.timelineView;
+  let sentinel = el.querySelector(".timeline-sentinel");
+  if (!sentinel) {
+    el.innerHTML = "";
+    sentinel = document.createElement("div");
+    sentinel.className = "timeline-sentinel";
+    el.appendChild(sentinel);
+    el._lastYear = null;
+    el._openYearEl = null;
+  }
+
+  const batch = timelineChunks.slice(timelineChunkIndex, timelineChunkIndex + TIMELINE_BATCH);
+  timelineChunkIndex += batch.length;
+
+  for (const chunk of batch) {
+    if (chunk.year !== el._lastYear) {
+      const yearSection = document.createElement("section");
+      yearSection.className = "timeline-year";
+      yearSection.innerHTML = `<h2 class="timeline-year-label">${chunk.year}</h2>`;
+      el.insertBefore(yearSection, sentinel);
+      el._openYearEl = yearSection;
+      el._lastYear = chunk.year;
+    }
+    const monthDiv = document.createElement("div");
+    monthDiv.className = "timeline-month";
+    monthDiv.innerHTML = `
+      <h3 class="timeline-month-label">${chunk.month === -1 ? "Không rõ tháng" : MONTHS_VI[chunk.month]}</h3>
+      <div class="photo-grid">${chunk.photos.map(photoCardHTML).join("")}</div>
+    `;
+    el._openYearEl.appendChild(monthDiv);
+    mountLazyImages(monthDiv);
+  }
+
+  if (timelineChunkIndex >= timelineChunks.length) {
+    sentinel.remove();
+    if (timelineObserver) {
+      timelineObserver.disconnect();
+      timelineObserver = null;
+    }
+  }
+}
+
+// Renders the first batch immediately, then appends more batches as the
+// user scrolls near the bottom — avoids building thousands of DOM nodes
+// up front for a lifetime's worth of photos.
+function renderTimeline() {
+  timelineChunks = buildTimelineChunks();
+  timelineChunkIndex = 0;
+  if (timelineChunks.length === 0) {
+    els.timelineView.innerHTML = "";
+    return;
+  }
+
+  renderTimelineBatch();
+
+  const sentinel = els.timelineView.querySelector(".timeline-sentinel");
+  if (sentinel) {
+    timelineObserver = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) renderTimelineBatch();
+      },
+      { rootMargin: "600px" }
+    );
+    timelineObserver.observe(sentinel);
+  }
 }
 
 function renderStats() {
@@ -140,28 +196,55 @@ function renderStats() {
   els.statsStrip.classList.remove("hidden");
 }
 
+// Day-of-year on a fixed non-leap reference year, so month/day pairs from
+// any two dates can be compared regardless of which year they actually fell in.
+function dayOfYear(month, day) {
+  return Math.round((Date.UTC(2001, month, day) - Date.UTC(2001, 0, 1)) / 86400000);
+}
+
+function circularDayDistance(a, b) {
+  const diff = Math.abs(a - b);
+  return Math.min(diff, 365 - diff);
+}
+
+// Always finds *something* to show: an exact "same day, past year" match if
+// one exists, otherwise whichever past-year photo's month/day sits closest
+// to today (wrapping around the year boundary) — so the home tab never comes
+// up empty just because nothing happened on this exact date historically.
 function renderOnThisDay() {
   const today = new Date();
-  const matches = state.photos.filter((p) => {
-    if (!p.date) return false;
-    const d = new Date(p.date);
-    return d.getMonth() === today.getMonth() && d.getDate() === today.getDate() && d.getFullYear() !== today.getFullYear();
-  });
+  const todayDoy = dayOfYear(today.getMonth(), today.getDate());
 
-  if (matches.length === 0) {
+  const pastPhotos = state.photos.filter((p) => p.date && new Date(p.date).getFullYear() < today.getFullYear());
+  if (pastPhotos.length === 0) {
     els.onThisDay.classList.add("hidden");
     return;
   }
+
+  let minDist = Infinity;
+  for (const p of pastPhotos) {
+    const d = new Date(p.date);
+    const dist = circularDayDistance(dayOfYear(d.getMonth(), d.getDate()), todayDoy);
+    if (dist < minDist) minDist = dist;
+  }
+  const matches = pastPhotos.filter((p) => {
+    const d = new Date(p.date);
+    return circularDayDistance(dayOfYear(d.getMonth(), d.getDate()), todayDoy) === minDist;
+  });
+
+  els.onThisDay.querySelector(".on-this-day-label").textContent =
+    minDist === 0 ? "Hôm nay năm xưa" : "Kỷ niệm gần đây";
 
   const scroller = els.onThisDay.querySelector(".on-this-day-scroller");
   scroller.innerHTML = matches
     .sort((a, b) => new Date(b.date) - new Date(a.date))
     .map((p) => {
-      const years = today.getFullYear() - new Date(p.date).getFullYear();
+      const badge =
+        minDist === 0 ? `${today.getFullYear() - new Date(p.date).getFullYear()} năm trước` : formatDate(p.date);
       return `
       <div class="on-this-day-card" data-id="${p.id}">
         <img data-src="${p.thumb}" alt="${p.place || ""}" loading="lazy" />
-        <span class="on-this-day-years">${years} năm trước</span>
+        <span class="on-this-day-years">${badge}</span>
       </div>`;
     })
     .join("");
@@ -258,7 +341,9 @@ function showAlbumDetail(albumId) {
 }
 
 function switchView(view) {
-  [els.timelineView, els.albumsView, els.albumDetailView, els.mapView].forEach((v) => v.classList.remove("active"));
+  [els.homeView, els.timelineView, els.albumsView, els.albumDetailView, els.mapView].forEach((v) =>
+    v.classList.remove("active")
+  );
   document.getElementById(`${view}-view`).classList.add("active");
   els.tabs.forEach((tab) => {
     const isMatch = tab.dataset.view === view;
@@ -297,8 +382,17 @@ function stepLightbox(delta) {
 function bindEvents() {
   els.tabs.forEach((tab) => {
     tab.addEventListener("click", () => {
-      switchView(tab.dataset.view);
-      if (tab.dataset.view === "map") {
+      const view = tab.dataset.view;
+      switchView(view);
+      // Each tab's content is only built the first time it's opened, so
+      // opening the app never has to render more than the home tab.
+      if (view === "timeline" && !rendered.timeline) {
+        rendered.timeline = true;
+        renderTimeline();
+      } else if (view === "albums" && !rendered.albums) {
+        rendered.albums = true;
+        renderAlbums();
+      } else if (view === "map") {
         ensureMap();
         setTimeout(() => leafletMap && leafletMap.invalidateSize(), 50);
       }
@@ -384,8 +478,8 @@ async function init() {
   if (state.photos.length === 0) {
     els.emptyState.classList.remove("hidden");
   } else {
-    renderTimeline();
-    renderAlbums();
+    // Only the landing tab ("Kỷ niệm") is built up front — Timeline/Albums/Map
+    // render lazily the first time their tab is opened (see bindEvents).
     renderStats();
     renderOnThisDay();
   }
