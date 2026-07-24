@@ -11,12 +11,17 @@ const els = {
   timelineView: document.getElementById("timeline-view"),
   albumsView: document.getElementById("albums-view"),
   albumDetailView: document.getElementById("album-detail-view"),
+  mapView: document.getElementById("map-view"),
   emptyState: document.getElementById("empty-state"),
+  statsStrip: document.getElementById("stats-strip"),
+  onThisDay: document.getElementById("on-this-day"),
   lightbox: document.getElementById("lightbox"),
   lightboxImg: document.querySelector(".lightbox-img"),
   lightboxDate: document.querySelector(".lightbox-date"),
   lightboxPlace: document.querySelector(".lightbox-place"),
 };
+
+let leafletMap = null;
 
 const MONTHS_VI = [
   "Tháng 1", "Tháng 2", "Tháng 3", "Tháng 4", "Tháng 5", "Tháng 6",
@@ -121,6 +126,95 @@ function renderTimeline() {
   mountLazyImages(els.timelineView);
 }
 
+function renderStats() {
+  const photos = state.photos;
+  const values = {
+    photos: photos.length,
+    albums: state.albums.length,
+    places: new Set(photos.map((p) => p.place).filter(Boolean)).size,
+    years: new Set(photos.map((p) => yearOf(p.date)).filter((y) => y !== "Không rõ năm")).size,
+  };
+  document.querySelectorAll("[data-stat]").forEach((el) => {
+    el.textContent = values[el.dataset.stat] ?? 0;
+  });
+  els.statsStrip.classList.remove("hidden");
+}
+
+function renderOnThisDay() {
+  const today = new Date();
+  const matches = state.photos.filter((p) => {
+    if (!p.date) return false;
+    const d = new Date(p.date);
+    return d.getMonth() === today.getMonth() && d.getDate() === today.getDate() && d.getFullYear() !== today.getFullYear();
+  });
+
+  if (matches.length === 0) {
+    els.onThisDay.classList.add("hidden");
+    return;
+  }
+
+  const scroller = els.onThisDay.querySelector(".on-this-day-scroller");
+  scroller.innerHTML = matches
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .map((p) => {
+      const years = today.getFullYear() - new Date(p.date).getFullYear();
+      return `
+      <div class="on-this-day-card" data-id="${p.id}">
+        <img data-src="${p.thumb}" alt="${p.place || ""}" loading="lazy" />
+        <span class="on-this-day-years">${years} năm trước</span>
+      </div>`;
+    })
+    .join("");
+  mountLazyImages(scroller);
+  els.onThisDay.classList.remove("hidden");
+}
+
+function ensureMap() {
+  if (leafletMap || typeof L === "undefined") return;
+  const withCoord = state.photos.filter((p) => p.coord);
+  const container = document.getElementById("memories-map");
+
+  if (withCoord.length === 0) {
+    container.outerHTML = `<p class="map-empty-hint">Chưa có ảnh nào có dữ liệu vị trí GPS.</p>`;
+    return;
+  }
+
+  leafletMap = L.map("memories-map", { scrollWheelZoom: false });
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "&copy; OpenStreetMap contributors",
+    maxZoom: 18,
+  }).addTo(leafletMap);
+
+  const byCoord = new Map();
+  for (const p of withCoord) {
+    const key = p.coord.join(",");
+    if (!byCoord.has(key)) byCoord.set(key, []);
+    byCoord.get(key).push(p);
+  }
+
+  const bounds = [];
+  for (const [key, photos] of byCoord) {
+    const [lat, lon] = key.split(",").map(Number);
+    bounds.push([lat, lon]);
+    const marker = L.circleMarker([lat, lon], {
+      radius: 8,
+      color: "#c9a24b",
+      fillColor: "#c9a24b",
+      fillOpacity: 0.85,
+      weight: 2,
+    }).addTo(leafletMap);
+    const place = photos[0].place || "Không rõ địa danh";
+    marker.bindPopup(
+      `<div class="map-popup"><strong>${place}</strong><p>${photos.length} ảnh</p><button class="map-popup-btn" type="button">Xem ảnh</button></div>`
+    );
+    marker.on("popupopen", (e) => {
+      const btn = e.popup.getElement().querySelector(".map-popup-btn");
+      btn.addEventListener("click", () => openLightbox(photos, 0));
+    });
+  }
+  leafletMap.fitBounds(bounds, { padding: [30, 30] });
+}
+
 function albumCardHTML(album) {
   const range =
     album.dateStart && album.dateEnd
@@ -164,7 +258,7 @@ function showAlbumDetail(albumId) {
 }
 
 function switchView(view) {
-  [els.timelineView, els.albumsView, els.albumDetailView].forEach((v) => v.classList.remove("active"));
+  [els.timelineView, els.albumsView, els.albumDetailView, els.mapView].forEach((v) => v.classList.remove("active"));
   document.getElementById(`${view}-view`).classList.add("active");
   els.tabs.forEach((tab) => {
     const isMatch = tab.dataset.view === view;
@@ -202,7 +296,13 @@ function stepLightbox(delta) {
 
 function bindEvents() {
   els.tabs.forEach((tab) => {
-    tab.addEventListener("click", () => switchView(tab.dataset.view));
+    tab.addEventListener("click", () => {
+      switchView(tab.dataset.view);
+      if (tab.dataset.view === "map") {
+        ensureMap();
+        setTimeout(() => leafletMap && leafletMap.invalidateSize(), 50);
+      }
+    });
   });
 
   // Delegated listeners: the grids inside these containers get replaced
@@ -210,6 +310,13 @@ function bindEvents() {
   // binding here once avoids ever needing to re-attach per-card listeners.
   els.timelineView.addEventListener("click", (e) => {
     const card = e.target.closest(".photo-card");
+    if (!card) return;
+    const idx = state.photos.findIndex((p) => p.id === card.dataset.id);
+    if (idx > -1) openLightbox(state.photos, idx);
+  });
+
+  els.onThisDay.addEventListener("click", (e) => {
+    const card = e.target.closest(".on-this-day-card");
     if (!card) return;
     const idx = state.photos.findIndex((p) => p.id === card.dataset.id);
     if (idx > -1) openLightbox(state.photos, idx);
@@ -279,8 +386,14 @@ async function init() {
   } else {
     renderTimeline();
     renderAlbums();
+    renderStats();
+    renderOnThisDay();
   }
   bindEvents();
+
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  }
 }
 
 init();

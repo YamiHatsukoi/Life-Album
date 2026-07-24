@@ -176,8 +176,13 @@ async function main() {
       if (date) albumDates.push(date);
 
       let place = null;
+      let coord = null;
       if (typeof exifData.latitude === "number" && typeof exifData.longitude === "number") {
         place = await reverseGeocode(exifData.latitude, exifData.longitude, geocache);
+        // Rounded to ~110m precision (same as the geocode cache key) rather
+        // than the exact GPS fix — good enough to place a pin on the map
+        // view without publishing anyone's precise coordinates.
+        if (place) coord = [Number(exifData.latitude.toFixed(3)), Number(exifData.longitude.toFixed(3))];
       }
 
       const meta = await sharp(buf).metadata();
@@ -211,6 +216,7 @@ async function main() {
         date,
         dateSource,
         place,
+        coord,
         thumb: `photos/${albumId}/thumb/${thumbName}`,
         full: `photos/${albumId}/full/${fullName}`,
         width: meta.width,
@@ -241,7 +247,7 @@ async function main() {
   await fs.mkdir(path.dirname(GEOCACHE_PATH), { recursive: true });
   await fs.writeFile(GEOCACHE_PATH, JSON.stringify(geocache, null, 2));
 
-  for (const f of ["index.html"]) {
+  for (const f of ["index.html", "manifest.json", "sw.js"]) {
     await fs.copyFile(path.join(ROOT, f), path.join(SITE_DIR, f));
   }
   await fs.cp(path.join(ROOT, "assets"), path.join(SITE_DIR, "assets"), { recursive: true });

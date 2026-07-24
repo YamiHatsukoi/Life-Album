@@ -23,6 +23,15 @@ Sau khoảng 1–2 phút, trang web sẽ tự cập nhật với ảnh mới. Ki
 
 Làm xong 2 bước trên là chạy mãi mãi, không cần đụng lại nữa.
 
+## Tính năng
+
+- **Dòng thời gian**: ảnh chia theo Năm → Tháng.
+- **Albums**: ảnh nhóm theo thư mục.
+- **Bản đồ kỷ niệm**: tab "Bản đồ" ghim các địa danh đã đi qua (dùng OpenStreetMap, miễn phí, không cần API key). Vị trí ghim làm tròn ~100m để không lộ tọa độ chính xác.
+- **Hôm nay năm xưa**: nếu có ảnh trùng ngày/tháng hôm nay ở năm trước, tự hiện banner đầu trang.
+- **Thống kê**: tổng số ảnh, album, địa danh, số năm — hiện ngay đầu trang.
+- **Cài như app điện thoại (PWA)**: mở trang trên điện thoại → trình duyệt sẽ gợi ý "Thêm vào màn hình chính" (Android: menu ⋮ → Add to Home screen; iPhone Safari: nút Share → Add to Home Screen), mở lên sẽ giống 1 app riêng, không có thanh địa chỉ trình duyệt.
+
 ## Cấu trúc dự án
 
 ```
@@ -30,6 +39,8 @@ photos/<Tên Album>/<ảnh gốc>     ← bạn chỉ cần thêm ảnh vào đ�
 data/geocache.json                ← cache tên địa danh, do Action tự cập nhật
 scripts/build.mjs                 ← script build (chạy trên GitHub Actions)
 .github/workflows/deploy.yml      ← workflow build + deploy
+manifest.json, sw.js              ← cấu hình PWA (cài như app)
+assets/icons/                     ← icon app
 index.html, assets/               ← giao diện web
 ```
 
@@ -37,4 +48,5 @@ index.html, assets/               ← giao diện web
 
 - Ảnh HEIC (một số máy iPhone chụp mặc định) cần chuyển sang JPG trước khi thêm vào, vì trình build hiện chưa hỗ trợ HEIC.
 - Trang web là công khai (ai có link đều xem được) vì đây là giới hạn của GitHub Pages bản miễn phí.
-- Vị trí ảnh chỉ hiển thị tên địa danh (thành phố/quốc gia), không hiển thị tọa độ chính xác.
+- Vị trí ảnh chỉ hiển thị tên địa danh (thành phố/quốc gia) và ghim bản đồ ở độ chính xác ~100m, không hiển thị tọa độ chính xác tuyệt đối.
+- **Settings → Pages → Source phải để "GitHub Actions"** (không phải "Deploy from a branch"), nếu không trang sẽ hiện "Chưa có kỷ niệm nào" dù đã có ảnh — xem mục Setup ban đầu ở trên.

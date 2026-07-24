@@ -5,25 +5,47 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Life Album</title>
   <meta name="description" content="Album Yami and Hana" />
+  <meta name="theme-color" content="#0a0a0c" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png" />
+  <link rel="icon" href="assets/icons/icon-192.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;1,500&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="assets/css/style.css" />
 </head>
 <body>
   <header class="site-header">
     <p class="site-eyebrow">Life Album</p>
     <h1 class="site-title">Yami and Hana</h1>
+
+    <div id="stats-strip" class="stats-strip hidden">
+      <div class="stat"><span class="stat-value" data-stat="photos">0</span><span class="stat-label">ảnh</span></div>
+      <div class="stat"><span class="stat-value" data-stat="albums">0</span><span class="stat-label">album</span></div>
+      <div class="stat"><span class="stat-value" data-stat="places">0</span><span class="stat-label">địa danh</span></div>
+      <div class="stat"><span class="stat-value" data-stat="years">0</span><span class="stat-label">năm</span></div>
+    </div>
+
     <nav class="view-tabs" role="tablist">
       <button class="tab active" data-view="timeline" role="tab" aria-selected="true">Dòng thời gian</button>
       <button class="tab" data-view="albums" role="tab" aria-selected="false">Albums</button>
+      <button class="tab" data-view="map" role="tab" aria-selected="false">Bản đồ</button>
     </nav>
   </header>
 
   <main>
+    <section id="on-this-day" class="on-this-day hidden">
+      <h2 class="on-this-day-label">Hôm nay năm xưa</h2>
+      <div class="on-this-day-scroller"></div>
+    </section>
+
     <section id="timeline-view" class="view active"></section>
     <section id="albums-view" class="view"></section>
     <section id="album-detail-view" class="view"></section>
+    <section id="map-view" class="view">
+      <div id="memories-map"></div>
+    </section>
 
     <div id="empty-state" class="empty-state hidden">
       <p>Chưa có kỷ niệm nào ở đây.</p>
@@ -44,6 +66,7 @@
     <button class="lightbox-next" aria-label="Ảnh tiếp theo">&#10095;</button>
   </div>
 
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
   <script src="assets/js/app.js" type="module"></script>
 </body>
 </html>
