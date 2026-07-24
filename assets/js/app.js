@@ -427,6 +427,20 @@ function openLightbox(photos, index) {
   els.lightbox.classList.remove("hidden");
 }
 
+// Warms the browser cache for the next/prev photo so the flip transition
+// below never gets stuck showing the old image while the new one is still
+// downloading — without this, the swap silently lands after the animation
+// instead of at the mid-flip point.
+function preloadAdjacent() {
+  const len = state.lightboxSet.length;
+  if (len <= 1) return;
+  const next = state.lightboxSet[(state.lightboxIndex + 1) % len];
+  const prev = state.lightboxSet[(state.lightboxIndex - 1 + len) % len];
+  for (const p of [next, prev]) {
+    if (p) new Image().src = p.full;
+  }
+}
+
 function renderLightbox() {
   const photo = state.lightboxSet[state.lightboxIndex];
   if (!photo) return;
@@ -434,6 +448,7 @@ function renderLightbox() {
   els.lightboxImg.alt = photo.place || "";
   els.lightboxDate.textContent = formatDate(photo.date);
   els.lightboxPlace.textContent = photo.place || "";
+  preloadAdjacent();
 }
 
 function closeLightbox() {
