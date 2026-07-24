@@ -374,6 +374,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 3rem 1.5rem 6rem; }
   margin: 0;
   max-width: min(90vw, 1100px);
   text-align: center;
+  perspective: 1400px;
 }
 
 .lightbox-img {
@@ -382,6 +383,16 @@ main { max-width: 1200px; margin: 0 auto; padding: 3rem 1.5rem 6rem; }
   border-radius: 6px;
   box-shadow: var(--shadow);
   cursor: pointer;
+  transform: rotateY(0deg);
+  transition: transform 0.32s ease, opacity 0.32s ease, filter 0.32s ease;
+  backface-visibility: hidden;
+}
+
+/* Mid-turn: edge-on and faded, like a paper page caught in the middle of a flip */
+.lightbox-img.flipping {
+  transform: rotateY(90deg);
+  opacity: 0.15;
+  filter: sepia(0.5) brightness(0.8);
 }
 
 .lightbox-figure figcaption {

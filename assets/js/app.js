@@ -441,10 +441,27 @@ function closeLightbox() {
   els.lightboxImg.src = "";
 }
 
+// Page-flip transition: rotate the photo edge-on (GPU-only transform/opacity,
+// no layout work per frame), swap the src while it's invisible mid-turn, then
+// rotate back — feels like turning a page in a paper album instead of a hard cut.
+const FLIP_MS = 320;
+let isFlipping = false;
+
 function stepLightbox(delta) {
+  if (isFlipping || state.lightboxSet.length <= 1) return;
+  isFlipping = true;
   const len = state.lightboxSet.length;
-  state.lightboxIndex = (state.lightboxIndex + delta + len) % len;
-  renderLightbox();
+  const nextIndex = (state.lightboxIndex + delta + len) % len;
+
+  els.lightboxImg.classList.add("flipping");
+  setTimeout(() => {
+    state.lightboxIndex = nextIndex;
+    renderLightbox();
+    els.lightboxImg.classList.remove("flipping");
+    setTimeout(() => {
+      isFlipping = false;
+    }, FLIP_MS);
+  }, FLIP_MS);
 }
 
 function bindEvents() {
